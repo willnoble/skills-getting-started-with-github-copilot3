@@ -1,26 +1,13 @@
-"""
-High School Management System API
+"""Pytest configuration and shared fixtures for FastAPI tests."""
 
-A super simple FastAPI application that allows students to view and sign up
-for extracurricular activities at Mergington High School.
-"""
+import pytest
+from fastapi.testclient import TestClient
+from src.app import app
+import copy
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-import os
-from pathlib import Path
 
-app = FastAPI(title="Mergington High School API",
-              description="API for viewing and signing up for extracurricular activities")
-
-# Mount the static files directory
-current_dir = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
-          "static")), name="static")
-
-# In-memory activity database
-activities = {
+# Store the original activities data
+INITIAL_ACTIVITIES = {
     "Chess Club": {
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
@@ -78,48 +65,36 @@ activities = {
 }
 
 
-@app.get("/")
-def root():
-    return RedirectResponse(url="/static/index.html")
+@pytest.fixture
+def client():
+    """Create a fresh TestClient instance with reset app state for each test.
+    
+    This ensures test isolation by restoring the app's in-memory activities
+    dictionary to its initial state before each test runs.
+    """
+    # Import here to access the current app module
+    from src import app as app_module
+    
+    # Reset the activities to initial state
+    app_module.activities.clear()
+    app_module.activities.update(copy.deepcopy(INITIAL_ACTIVITIES))
+    
+    return TestClient(app)
 
 
-@app.get("/activities")
-def get_activities():
-    return activities
+@pytest.fixture
+def sample_email():
+    """Provide a sample email for test signup operations."""
+    return "test.student@mergington.edu"
 
 
-@app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
-    """Sign up a student for an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # Get the specific activity
-    activity = activities[activity_name]
-
-    # Validate student is not already signed up
-    if email in activity["participants"]:
-     raise HTTPException(status_code=400, detail="Student is already signed up for this activity")
-
-    # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+@pytest.fixture
+def sample_activity_name():
+    """Provide a sample activity name that exists in the pre-loaded data."""
+    return "Chess Club"
 
 
-@app.delete("/activities/{activity_name}/participants/{email}")
-def remove_participant(activity_name: str, email: str):
-    """Remove a student from an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    # Get the specific activity
-    activity = activities[activity_name]
-
-    # Remove student if present
-    if email in activity["participants"]:
-        activity["participants"].remove(email)
-        return {"message": f"Removed {email} from {activity_name}"}
-    else:
-        raise HTTPException(status_code=404, detail="Student not found in this activity")
+@pytest.fixture
+def nonexistent_activity_name():
+    """Provide an activity name that does not exist."""
+    return "Nonexistent Activity"
